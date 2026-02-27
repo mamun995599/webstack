@@ -1,0 +1,1 @@
+sudo setcap 'cap_net_bind_service=+ep' ~/webstack/nginx/sbin/nginx

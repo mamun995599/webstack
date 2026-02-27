@@ -1,0 +1,250 @@
+#!/bin/bash
+# webstack - Main control script
+
+WEBSTACK_ROOT="$(cd "$(dirname "$0")" && pwd)"
+export PATH="$WEBSTACK_ROOT/deps/bin:$WEBSTACK_ROOT/php/bin:$WEBSTACK_ROOT/node/bin:$WEBSTACK_ROOT/mysql/bin:$WEBSTACK_ROOT/nginx/sbin:$PATH"
+export LD_LIBRARY_PATH="$WEBSTACK_ROOT/deps/lib:$WEBSTACK_ROOT/php/lib:$LD_LIBRARY_PATH"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m'
+
+print_status() {
+    local name="$1"
+    local pid_file="$2"
+    local status="${RED}STOPPED${NC}"
+    
+    if [ -f "$pid_file" ]; then
+        local pid=$(cat "$pid_file")
+        if kill -0 "$pid" 2>/dev/null; then
+            status="${GREEN}RUNNING${NC} (PID: $pid)"
+        fi
+    fi
+    printf "  %-12s %b\n" "$name:" "$status"
+}
+
+start_nginx() {
+    echo -n "Starting Nginx... "
+    if [ -f "$WEBSTACK_ROOT/tmp/nginx.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/nginx.pid") 2>/dev/null; then
+        echo "already running"
+        return 0
+    fi
+    "$WEBSTACK_ROOT/nginx/sbin/nginx" -p "$WEBSTACK_ROOT/nginx" 2>/dev/null && echo "OK" || echo "FAILED"
+}
+
+stop_nginx() {
+    echo -n "Stopping Nginx... "
+    if [ -f "$WEBSTACK_ROOT/tmp/nginx.pid" ]; then
+        "$WEBSTACK_ROOT/nginx/sbin/nginx" -p "$WEBSTACK_ROOT/nginx" -s quit 2>/dev/null
+        sleep 1
+    fi
+    echo "OK"
+}
+
+start_php() {
+    echo -n "Starting PHP-FPM... "
+    if [ -f "$WEBSTACK_ROOT/php/var/run/php-fpm.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/php/var/run/php-fpm.pid") 2>/dev/null; then
+        echo "already running"
+        return 0
+    fi
+    "$WEBSTACK_ROOT/php/sbin/php-fpm" -c "$WEBSTACK_ROOT/php/etc/php.ini" -y "$WEBSTACK_ROOT/php/etc/php-fpm.conf" 2>/dev/null && echo "OK" || echo "FAILED"
+}
+
+stop_php() {
+    echo -n "Stopping PHP-FPM... "
+    if [ -f "$WEBSTACK_ROOT/php/var/run/php-fpm.pid" ]; then
+        kill $(cat "$WEBSTACK_ROOT/php/var/run/php-fpm.pid") 2>/dev/null
+        rm -f "$WEBSTACK_ROOT/php/var/run/php-fpm.pid"
+    fi
+    rm -f "$WEBSTACK_ROOT/tmp/php-fpm.sock"
+    echo "OK"
+}
+
+start_node() {
+    echo -n "Starting Node.js... "
+    if [ -f "$WEBSTACK_ROOT/tmp/node.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/node.pid") 2>/dev/null; then
+        echo "already running"
+        return 0
+    fi
+    cd "$WEBSTACK_ROOT/www"
+    nohup "$WEBSTACK_ROOT/node/bin/node" app.js > "$WEBSTACK_ROOT/logs/node.log" 2>&1 &
+    echo $! > "$WEBSTACK_ROOT/tmp/node.pid"
+    echo "OK"
+}
+
+stop_node() {
+    echo -n "Stopping Node.js... "
+    [ -f "$WEBSTACK_ROOT/tmp/node.pid" ] && kill $(cat "$WEBSTACK_ROOT/tmp/node.pid") 2>/dev/null
+    rm -f "$WEBSTACK_ROOT/tmp/node.pid"
+    echo "OK"
+}
+
+start_ws() {
+    echo -n "Starting WebSocket... "
+    if [ -f "$WEBSTACK_ROOT/tmp/ws.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/ws.pid") 2>/dev/null; then
+        echo "already running"
+        return 0
+    fi
+    cd "$WEBSTACK_ROOT/ws"
+    [ ! -d "node_modules" ] && npm install --silent 2>/dev/null
+    nohup "$WEBSTACK_ROOT/node/bin/node" server.js > "$WEBSTACK_ROOT/logs/ws.log" 2>&1 &
+    echo $! > "$WEBSTACK_ROOT/tmp/ws.pid"
+    echo "OK"
+}
+
+stop_ws() {
+    echo -n "Stopping WebSocket... "
+    [ -f "$WEBSTACK_ROOT/tmp/ws.pid" ] && kill $(cat "$WEBSTACK_ROOT/tmp/ws.pid") 2>/dev/null
+    rm -f "$WEBSTACK_ROOT/tmp/ws.pid"
+    echo "OK"
+}
+
+start_mysql() {
+    if [ ! -d "$WEBSTACK_ROOT/mysql" ]; then return; fi
+    echo -n "Starting MySQL... "
+    if [ -S "$WEBSTACK_ROOT/tmp/mysql.sock" ]; then
+        echo "already running"
+        return 0
+    fi
+    "$WEBSTACK_ROOT/mysql/bin/mysqld_safe" --defaults-file="$WEBSTACK_ROOT/mysql/my.cnf" &
+    sleep 3
+    [ -S "$WEBSTACK_ROOT/tmp/mysql.sock" ] && echo "OK" || echo "FAILED"
+}
+
+stop_mysql() {
+    if [ ! -d "$WEBSTACK_ROOT/mysql" ]; then return; fi
+    echo -n "Stopping MySQL... "
+    if [ -S "$WEBSTACK_ROOT/tmp/mysql.sock" ]; then
+        "$WEBSTACK_ROOT/mysql/bin/mysqladmin" --socket="$WEBSTACK_ROOT/tmp/mysql.sock" -u root shutdown 2>/dev/null
+    fi
+    [ -f "$WEBSTACK_ROOT/tmp/mysql.pid" ] && kill $(cat "$WEBSTACK_ROOT/tmp/mysql.pid") 2>/dev/null
+    rm -f "$WEBSTACK_ROOT/tmp/mysql.pid" "$WEBSTACK_ROOT/tmp/mysql.sock"
+    echo "OK"
+}
+
+start_cloudflare() {
+    if [ -x "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" ]; then
+        "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" daemon 80
+    fi
+}
+
+stop_cloudflare() {
+    if [ -x "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" ]; then
+        "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" stop-daemon
+    fi
+}
+
+status() {
+    echo ""
+    echo "========================================"
+    echo "WebStack Status"
+    echo "========================================"
+    echo ""
+    print_status "Nginx" "$WEBSTACK_ROOT/tmp/nginx.pid"
+    print_status "PHP-FPM" "$WEBSTACK_ROOT/php/var/run/php-fpm.pid"
+    print_status "Node.js" "$WEBSTACK_ROOT/tmp/node.pid"
+    print_status "WebSocket" "$WEBSTACK_ROOT/tmp/ws.pid"
+    [ -d "$WEBSTACK_ROOT/mysql" ] && print_status "MySQL" "$WEBSTACK_ROOT/tmp/mysql.pid"
+    
+    # Cloudflare tunnel
+    if [ -f "$WEBSTACK_ROOT/tmp/cloudflare_tunnel.pid" ]; then
+        local cf_pid=$(cat "$WEBSTACK_ROOT/tmp/cloudflare_tunnel.pid")
+        if kill -0 "$cf_pid" 2>/dev/null; then
+            local cf_url=""
+            [ -f "$WEBSTACK_ROOT/tmp/cloudflare_url.txt" ] && cf_url=$(cat "$WEBSTACK_ROOT/tmp/cloudflare_url.txt")
+            printf "  %-12s ${GREEN}RUNNING${NC}\n" "Cloudflare:"
+            [ -n "$cf_url" ] && printf "  %-12s ${BLUE}%s${NC}\n" "Tunnel URL:" "$cf_url"
+        else
+            printf "  %-12s ${YELLOW}DEAD${NC}\n" "Cloudflare:"
+        fi
+    else
+        printf "  %-12s ${YELLOW}STOPPED${NC}\n" "Cloudflare:"
+    fi
+    
+    echo ""
+    echo "URLs:"
+    echo "  HTTP:       http://localhost"
+    echo "  HTTPS:      https://localhost"
+    echo "  RTMP:       rtmp://localhost:1935/live/streamkey"
+    echo "  RTMPS:      rtmps://localhost:1936/live/streamkey"
+    [ -f "$WEBSTACK_ROOT/tmp/cloudflare_url.txt" ] && echo "  Cloudflare: $(cat "$WEBSTACK_ROOT/tmp/cloudflare_url.txt")"
+    echo ""
+}
+
+case "$1" in
+    start)
+        echo ""
+        start_php
+        start_nginx
+        start_node
+        start_ws
+        start_mysql
+        echo ""
+        echo "WebStack started!"
+        echo ""
+        ;;
+    stop)
+        echo ""
+        stop_cloudflare
+        stop_ws
+        stop_node
+        stop_nginx
+        stop_php
+        stop_mysql
+        echo ""
+        echo "WebStack stopped!"
+        echo ""
+        ;;
+    restart)
+        $0 stop
+        sleep 2
+        $0 start
+        ;;
+    status)
+        status
+        ;;
+    tunnel)
+        shift
+        if [ -x "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" ]; then
+            "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" "$@"
+        else
+            echo "Cloudflare tunnel not installed. Run: ./install_cloudflared.sh"
+        fi
+        ;;
+    logs)
+        echo "=== Nginx Error Log ==="
+        tail -20 "$WEBSTACK_ROOT/nginx/logs/error.log" 2>/dev/null
+        echo ""
+        echo "=== PHP-FPM Log ==="
+        tail -20 "$WEBSTACK_ROOT/php/var/log/php-fpm.log" 2>/dev/null
+        echo ""
+        echo "=== Node.js Log ==="
+        tail -20 "$WEBSTACK_ROOT/logs/node.log" 2>/dev/null
+        ;;
+    *)
+        echo "WebStack Control"
+        echo ""
+        echo "Usage: $0 {start|stop|restart|status|tunnel|logs}"
+        echo ""
+        echo "Commands:"
+        echo "  start         Start all services"
+        echo "  stop          Stop all services"
+        echo "  restart       Restart all services"
+        echo "  status        Show status of all services"
+        echo "  tunnel <cmd>  Manage Cloudflare tunnel"
+        echo "  logs          Show recent logs"
+        echo ""
+        echo "Tunnel commands:"
+        echo "  tunnel start       Start tunnel"
+        echo "  tunnel stop        Stop tunnel"
+        echo "  tunnel daemon      Start with auto-reconnect"
+        echo "  tunnel status      Show tunnel status"
+        echo "  tunnel url         Show current URL"
+        echo "  tunnel logs        Show URL history"
+        echo ""
+        exit 1
+        ;;
+esac

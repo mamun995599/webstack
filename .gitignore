@@ -1,0 +1,8 @@
+# Ignore the data directory
+data/
+
+# Ignore the mysql directory
+mysql/
+
+# Ignore the cv directory
+wwww/cv/

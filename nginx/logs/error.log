@@ -1,0 +1,7 @@
+2026/02/27 12:43:57 [warn] 10645#10645: the "user" directive makes sense only if the master process runs with super-user privileges, ignored in /home/mamun/webstack/nginx/conf/nginx.conf:1
+2026/02/27 12:43:57 [info] 10645#10645: Using 65536KiB of shared memory for push stream module on zone: push_stream_module in /home/mamun/webstack/nginx/conf/nginx.conf:37
+2026/02/27 12:43:57 [warn] 10645#10645: 4096 worker_connections exceed open file resource limit: 1024
+2026/02/27 12:44:02 [warn] 10658#10658: the "user" directive makes sense only if the master process runs with super-user privileges, ignored in /home/mamun/webstack/nginx/conf/nginx.conf:1
+2026/02/27 12:44:02 [warn] 10658#10658: 4096 worker_connections exceed open file resource limit: 1024
+2026/02/27 12:46:19 [warn] 10810#10810: the "user" directive makes sense only if the master process runs with super-user privileges, ignored in /home/mamun/webstack/nginx/conf/nginx.conf:1
+2026/02/27 12:46:19 [notice] 10810#10810: signal process started

@@ -1,0 +1,8 @@
+#!/bin/bash
+WEBSTACK_ROOT="$(cd "$(dirname "$0")" && pwd)"
+export PATH="$WEBSTACK_ROOT/php/bin:$PATH"
+export SSL_CERT_FILE="$WEBSTACK_ROOT/deps/ssl/certs/cacert.pem"
+"$WEBSTACK_ROOT/php/bin/php" \
+    -d openssl.cafile="$WEBSTACK_ROOT/deps/ssl/certs/cacert.pem" \
+    -d curl.cainfo="$WEBSTACK_ROOT/deps/ssl/certs/cacert.pem" \
+    "$WEBSTACK_ROOT/php/bin/composer" "$@"
