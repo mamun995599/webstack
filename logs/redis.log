@@ -1,0 +1,25 @@
+12363:C 27 Feb 2026 13:20:34.922 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+12364:C 27 Feb 2026 13:20:34.923 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+12364:C 27 Feb 2026 13:20:34.923 * Redis version=7.2.4, bits=64, commit=00000000, modified=0, pid=12364, just started
+12364:C 27 Feb 2026 13:20:34.923 * Configuration loaded
+12364:M 27 Feb 2026 13:20:34.924 * Increased maximum number of open files to 10032 (it was originally set to 1024).
+12364:M 27 Feb 2026 13:20:34.924 * monotonic clock: POSIX clock_gettime
+12364:M 27 Feb 2026 13:20:34.924 * Running mode=standalone, port=6379.
+12364:M 27 Feb 2026 13:20:34.925 * Server initialized
+12364:M 27 Feb 2026 13:20:34.925 * Ready to accept connections tcp
+12364:M 27 Feb 2026 13:57:42.938 * User requested shutdown...
+12364:M 27 Feb 2026 13:57:42.942 * Removing the pid file.
+12364:M 27 Feb 2026 13:57:42.942 # Redis is now ready to exit, bye bye...
+13621:C 27 Feb 2026 14:02:29.757 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+13622:C 27 Feb 2026 14:02:29.770 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+13622:C 27 Feb 2026 14:02:29.770 * Redis version=7.2.4, bits=64, commit=00000000, modified=0, pid=13622, just started
+13622:C 27 Feb 2026 14:02:29.770 * Configuration loaded
+13622:M 27 Feb 2026 14:02:29.770 * monotonic clock: POSIX clock_gettime
+13622:M 27 Feb 2026 14:02:29.771 * Running mode=standalone, port=6379.
+13622:M 27 Feb 2026 14:02:29.772 * Server initialized
+13622:M 27 Feb 2026 14:02:29.772 * Ready to accept connections tcp
+13622:M 27 Feb 2026 14:07:30.031 * 10 changes in 300 seconds. Saving...
+13622:M 27 Feb 2026 14:07:30.032 * Background saving started by pid 14131
+14131:C 27 Feb 2026 14:07:30.080 * DB saved on disk
+14131:C 27 Feb 2026 14:07:30.080 * Fork CoW for RDB: current 0 MB, peak 0 MB, average 0 MB
+13622:M 27 Feb 2026 14:07:30.132 * Background saving terminated with success

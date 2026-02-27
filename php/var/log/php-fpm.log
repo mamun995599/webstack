@@ -5,3 +5,14 @@
 [27-Feb-2026 12:46:20] NOTICE: Terminating ...
 [27-Feb-2026 12:46:20] NOTICE: exiting, bye-bye!
 [27-Feb-2026 12:46:20] ERROR: Unable to remove the PID file (/home/mamun/webstack/php/var/run/php-fpm.pid).: No such file or directory (2)
+[27-Feb-2026 13:29:15] NOTICE: [pool www] 'user' directive is ignored when FPM is not running as root
+[27-Feb-2026 13:29:15] NOTICE: [pool www] 'group' directive is ignored when FPM is not running as root
+[27-Feb-2026 13:29:15] NOTICE: fpm is running, pid 12969
+[27-Feb-2026 13:29:15] NOTICE: ready to handle connections
+[27-Feb-2026 13:57:41] NOTICE: Terminating ...
+[27-Feb-2026 13:57:41] NOTICE: exiting, bye-bye!
+[27-Feb-2026 13:57:41] ERROR: Unable to remove the PID file (/home/mamun/webstack/php/var/run/php-fpm.pid).: No such file or directory (2)
+[27-Feb-2026 14:02:31] NOTICE: [pool www] 'user' directive is ignored when FPM is not running as root
+[27-Feb-2026 14:02:31] NOTICE: [pool www] 'group' directive is ignored when FPM is not running as root
+[27-Feb-2026 14:02:31] NOTICE: fpm is running, pid 13645
+[27-Feb-2026 14:02:31] NOTICE: ready to handle connections

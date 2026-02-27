@@ -1,5 +1,5 @@
 #!/bin/bash
-# webstack - Main control script
+# webstack - Main control script with Redis & Memcached support
 
 WEBSTACK_ROOT="$(cd "$(dirname "$0")" && pwd)"
 export PATH="$WEBSTACK_ROOT/deps/bin:$WEBSTACK_ROOT/php/bin:$WEBSTACK_ROOT/node/bin:$WEBSTACK_ROOT/mysql/bin:$WEBSTACK_ROOT/nginx/sbin:$PATH"
@@ -10,6 +10,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m'
 
 print_status() {
@@ -26,6 +27,9 @@ print_status() {
     printf "  %-12s %b\n" "$name:" "$status"
 }
 
+# ============================================
+# NGINX
+# ============================================
 start_nginx() {
     echo -n "Starting Nginx... "
     if [ -f "$WEBSTACK_ROOT/tmp/nginx.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/nginx.pid") 2>/dev/null; then
@@ -44,6 +48,9 @@ stop_nginx() {
     echo "OK"
 }
 
+# ============================================
+# PHP-FPM
+# ============================================
 start_php() {
     echo -n "Starting PHP-FPM... "
     if [ -f "$WEBSTACK_ROOT/php/var/run/php-fpm.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/php/var/run/php-fpm.pid") 2>/dev/null; then
@@ -63,6 +70,9 @@ stop_php() {
     echo "OK"
 }
 
+# ============================================
+# NODE.JS
+# ============================================
 start_node() {
     echo -n "Starting Node.js... "
     if [ -f "$WEBSTACK_ROOT/tmp/node.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/node.pid") 2>/dev/null; then
@@ -82,6 +92,9 @@ stop_node() {
     echo "OK"
 }
 
+# ============================================
+# WEBSOCKET
+# ============================================
 start_ws() {
     echo -n "Starting WebSocket... "
     if [ -f "$WEBSTACK_ROOT/tmp/ws.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/ws.pid") 2>/dev/null; then
@@ -89,7 +102,7 @@ start_ws() {
         return 0
     fi
     cd "$WEBSTACK_ROOT/ws"
-    [ ! -d "node_modules" ] && npm install --silent 2>/dev/null
+    [ ! -d "node_modules" ] && "$WEBSTACK_ROOT/node/bin/node" "$WEBSTACK_ROOT/node/bin/npm" install --silent 2>/dev/null
     nohup "$WEBSTACK_ROOT/node/bin/node" server.js > "$WEBSTACK_ROOT/logs/ws.log" 2>&1 &
     echo $! > "$WEBSTACK_ROOT/tmp/ws.pid"
     echo "OK"
@@ -102,6 +115,9 @@ stop_ws() {
     echo "OK"
 }
 
+# ============================================
+# MYSQL
+# ============================================
 start_mysql() {
     if [ ! -d "$WEBSTACK_ROOT/mysql" ]; then return; fi
     echo -n "Starting MySQL... "
@@ -125,6 +141,136 @@ stop_mysql() {
     echo "OK"
 }
 
+# ============================================
+# REDIS (checks both possible locations)
+# ============================================
+get_redis_server() {
+    # Check deps/bin first (from install_redis_memcached.sh)
+    if [ -x "$WEBSTACK_ROOT/deps/bin/redis-server" ]; then
+        echo "$WEBSTACK_ROOT/deps/bin/redis-server"
+    # Then check redis/bin (alternative location)
+    elif [ -x "$WEBSTACK_ROOT/redis/bin/redis-server" ]; then
+        echo "$WEBSTACK_ROOT/redis/bin/redis-server"
+    fi
+}
+
+get_redis_cli() {
+    if [ -x "$WEBSTACK_ROOT/deps/bin/redis-cli" ]; then
+        echo "$WEBSTACK_ROOT/deps/bin/redis-cli"
+    elif [ -x "$WEBSTACK_ROOT/redis/bin/redis-cli" ]; then
+        echo "$WEBSTACK_ROOT/redis/bin/redis-cli"
+    fi
+}
+
+start_redis() {
+    local redis_server=$(get_redis_server)
+    if [ -z "$redis_server" ]; then return; fi
+    
+    echo -n "Starting Redis... "
+    if [ -f "$WEBSTACK_ROOT/tmp/redis.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/redis.pid") 2>/dev/null; then
+        echo "already running"
+        return 0
+    fi
+    
+    # Create directories
+    mkdir -p "$WEBSTACK_ROOT/data/redis"
+    mkdir -p "$WEBSTACK_ROOT/logs"
+    mkdir -p "$WEBSTACK_ROOT/tmp"
+    mkdir -p "$WEBSTACK_ROOT/redis"
+    
+    # Create config if not exists
+    if [ ! -f "$WEBSTACK_ROOT/redis/redis.conf" ]; then
+        cat > "$WEBSTACK_ROOT/redis/redis.conf" << REDISCONF
+bind 127.0.0.1
+port 6379
+daemonize yes
+pidfile $WEBSTACK_ROOT/tmp/redis.pid
+logfile $WEBSTACK_ROOT/logs/redis.log
+dir $WEBSTACK_ROOT/data/redis
+dbfilename dump.rdb
+maxmemory 128mb
+maxmemory-policy allkeys-lru
+save 900 1
+save 300 10
+save 60 10000
+REDISCONF
+    fi
+    
+    "$redis_server" "$WEBSTACK_ROOT/redis/redis.conf" && echo "OK" || echo "FAILED"
+}
+
+stop_redis() {
+    local redis_cli=$(get_redis_cli)
+    
+    echo -n "Stopping Redis... "
+    if [ -f "$WEBSTACK_ROOT/tmp/redis.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/redis.pid") 2>/dev/null; then
+        if [ -n "$redis_cli" ]; then
+            "$redis_cli" -p 6379 shutdown nosave 2>/dev/null || \
+            kill $(cat "$WEBSTACK_ROOT/tmp/redis.pid") 2>/dev/null
+        else
+            kill $(cat "$WEBSTACK_ROOT/tmp/redis.pid") 2>/dev/null
+        fi
+    fi
+    rm -f "$WEBSTACK_ROOT/tmp/redis.pid"
+    echo "OK"
+}
+
+# ============================================
+# MEMCACHED (checks both possible locations)
+# ============================================
+get_memcached() {
+    # Check deps/bin first (from install_redis_memcached.sh)
+    if [ -x "$WEBSTACK_ROOT/deps/bin/memcached" ]; then
+        echo "$WEBSTACK_ROOT/deps/bin/memcached"
+    # Then check memcached/bin (alternative location)
+    elif [ -x "$WEBSTACK_ROOT/memcached/bin/memcached" ]; then
+        echo "$WEBSTACK_ROOT/memcached/bin/memcached"
+    fi
+}
+
+start_memcached() {
+    local memcached_bin=$(get_memcached)
+    if [ -z "$memcached_bin" ]; then return; fi
+    
+    echo -n "Starting Memcached... "
+    if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null; then
+        echo "already running"
+        return 0
+    fi
+    
+    mkdir -p "$WEBSTACK_ROOT/logs"
+    mkdir -p "$WEBSTACK_ROOT/tmp"
+    
+    "$memcached_bin" \
+        -d \
+        -m 64 \
+        -p 11211 \
+        -u $(whoami) \
+        -l 127.0.0.1 \
+        -c 1024 \
+        -P "$WEBSTACK_ROOT/tmp/memcached.pid" \
+        >> "$WEBSTACK_ROOT/logs/memcached.log" 2>&1
+    
+    sleep 1
+    if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null; then
+        echo "OK"
+    else
+        echo "FAILED"
+    fi
+}
+
+stop_memcached() {
+    echo -n "Stopping Memcached... "
+    if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ]; then
+        kill $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null
+        rm -f "$WEBSTACK_ROOT/tmp/memcached.pid"
+    fi
+    echo "OK"
+}
+
+# ============================================
+# CLOUDFLARE TUNNEL
+# ============================================
 start_cloudflare() {
     if [ -x "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" ]; then
         "$WEBSTACK_ROOT/scripts/cloudflare_tunnel.sh" daemon 80
@@ -137,19 +283,96 @@ stop_cloudflare() {
     fi
 }
 
+# ============================================
+# STATUS
+# ============================================
 status() {
     echo ""
     echo "========================================"
     echo "WebStack Status"
     echo "========================================"
     echo ""
+    
+    # Core Services
+    echo -e "${CYAN}Core Services:${NC}"
     print_status "Nginx" "$WEBSTACK_ROOT/tmp/nginx.pid"
     print_status "PHP-FPM" "$WEBSTACK_ROOT/php/var/run/php-fpm.pid"
     print_status "Node.js" "$WEBSTACK_ROOT/tmp/node.pid"
     print_status "WebSocket" "$WEBSTACK_ROOT/tmp/ws.pid"
-    [ -d "$WEBSTACK_ROOT/mysql" ] && print_status "MySQL" "$WEBSTACK_ROOT/tmp/mysql.pid"
+    
+    # Database
+    echo ""
+    echo -e "${CYAN}Database:${NC}"
+    if [ -d "$WEBSTACK_ROOT/mysql" ]; then
+        if [ -S "$WEBSTACK_ROOT/tmp/mysql.sock" ]; then
+            printf "  %-12s ${GREEN}RUNNING${NC} (socket)\n" "MySQL:"
+        else
+            printf "  %-12s ${RED}STOPPED${NC}\n" "MySQL:"
+        fi
+    else
+        printf "  %-12s ${YELLOW}NOT INSTALLED${NC}\n" "MySQL:"
+    fi
+    
+    # Cache Services
+    echo ""
+    echo -e "${CYAN}Cache Services:${NC}"
+    
+    # Redis status
+    local redis_server=$(get_redis_server)
+    local redis_cli=$(get_redis_cli)
+    if [ -n "$redis_server" ]; then
+        if [ -f "$WEBSTACK_ROOT/tmp/redis.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/redis.pid") 2>/dev/null; then
+            local redis_version=""
+            if [ -n "$redis_cli" ]; then
+                redis_version=$("$redis_cli" INFO server 2>/dev/null | grep redis_version | cut -d: -f2 | tr -d '\r')
+            fi
+            if [ -n "$redis_version" ]; then
+                printf "  %-12s ${GREEN}RUNNING${NC} (port: 6379, v${redis_version})\n" "Redis:"
+            else
+                printf "  %-12s ${GREEN}RUNNING${NC} (port: 6379)\n" "Redis:"
+            fi
+        else
+            printf "  %-12s ${RED}STOPPED${NC}\n" "Redis:"
+        fi
+    else
+        printf "  %-12s ${YELLOW}NOT INSTALLED${NC}\n" "Redis:"
+    fi
+    
+    # Memcached status
+    local memcached_bin=$(get_memcached)
+    if [ -n "$memcached_bin" ]; then
+        if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null; then
+            printf "  %-12s ${GREEN}RUNNING${NC} (port: 11211)\n" "Memcached:"
+        else
+            printf "  %-12s ${RED}STOPPED${NC}\n" "Memcached:"
+        fi
+    else
+        printf "  %-12s ${YELLOW}NOT INSTALLED${NC}\n" "Memcached:"
+    fi
+    
+    # PHP Extensions
+    echo ""
+    echo -e "${CYAN}PHP Cache Extensions:${NC}"
+    if [ -x "$WEBSTACK_ROOT/php/bin/php" ]; then
+        local redis_ext=$("$WEBSTACK_ROOT/php/bin/php" -m 2>/dev/null | grep -c "^redis$")
+        local memcached_ext=$("$WEBSTACK_ROOT/php/bin/php" -m 2>/dev/null | grep -c "^memcached$")
+        
+        if [ "$redis_ext" -eq 1 ]; then
+            printf "  %-12s ${GREEN}LOADED${NC}\n" "redis:"
+        else
+            printf "  %-12s ${RED}NOT LOADED${NC}\n" "redis:"
+        fi
+        
+        if [ "$memcached_ext" -eq 1 ]; then
+            printf "  %-12s ${GREEN}LOADED${NC}\n" "memcached:"
+        else
+            printf "  %-12s ${RED}NOT LOADED${NC}\n" "memcached:"
+        fi
+    fi
     
     # Cloudflare tunnel
+    echo ""
+    echo -e "${CYAN}External Access:${NC}"
     if [ -f "$WEBSTACK_ROOT/tmp/cloudflare_tunnel.pid" ]; then
         local cf_pid=$(cat "$WEBSTACK_ROOT/tmp/cloudflare_tunnel.pid")
         if kill -0 "$cf_pid" 2>/dev/null; then
@@ -158,25 +381,118 @@ status() {
             printf "  %-12s ${GREEN}RUNNING${NC}\n" "Cloudflare:"
             [ -n "$cf_url" ] && printf "  %-12s ${BLUE}%s${NC}\n" "Tunnel URL:" "$cf_url"
         else
-            printf "  %-12s ${YELLOW}DEAD${NC}\n" "Cloudflare:"
+            printf "  %-12s ${YELLOW}DEAD${NC} (stale PID)\n" "Cloudflare:"
         fi
     else
         printf "  %-12s ${YELLOW}STOPPED${NC}\n" "Cloudflare:"
     fi
     
+    # URLs
     echo ""
-    echo "URLs:"
+    echo -e "${CYAN}URLs:${NC}"
     echo "  HTTP:       http://localhost"
     echo "  HTTPS:      https://localhost"
     echo "  RTMP:       rtmp://localhost:1935/live/streamkey"
     echo "  RTMPS:      rtmps://localhost:1936/live/streamkey"
-    [ -f "$WEBSTACK_ROOT/tmp/cloudflare_url.txt" ] && echo "  Cloudflare: $(cat "$WEBSTACK_ROOT/tmp/cloudflare_url.txt")"
+    [ -f "$WEBSTACK_ROOT/tmp/cloudflare_url.txt" ] && echo -e "  Cloudflare: ${BLUE}$(cat "$WEBSTACK_ROOT/tmp/cloudflare_url.txt")${NC}"
+    
+    # Connection Info
+    echo ""
+    echo -e "${CYAN}Connection Info:${NC}"
+    echo "  MySQL:      socket: $WEBSTACK_ROOT/tmp/mysql.sock"
+    echo "  Redis:      127.0.0.1:6379"
+    echo "  Memcached:  127.0.0.1:11211"
+    echo "  PHP-FPM:    $WEBSTACK_ROOT/tmp/php-fpm.sock"
     echo ""
 }
 
+# ============================================
+# CACHE COMMANDS
+# ============================================
+cache_status() {
+    echo ""
+    echo "========================================"
+    echo "Cache Status"
+    echo "========================================"
+    
+    local redis_cli=$(get_redis_cli)
+    
+    # Redis
+    echo ""
+    echo -e "${CYAN}Redis:${NC}"
+    if [ -n "$redis_cli" ] && "$redis_cli" ping > /dev/null 2>&1; then
+        echo "  Status: ${GREEN}CONNECTED${NC}"
+        echo "  Info:"
+        "$redis_cli" INFO 2>/dev/null | grep -E "(redis_version|used_memory_human|connected_clients|total_connections|db[0-9]+:)" | sed 's/^/    /'
+    else
+        local redis_server=$(get_redis_server)
+        if [ -n "$redis_server" ]; then
+            echo -e "  Status: ${RED}NOT RUNNING${NC}"
+            echo "  Start with: ./webstack redis start"
+        else
+            echo -e "  Status: ${YELLOW}NOT INSTALLED${NC}"
+            echo "  Install with: ./install_redis_memcached.sh"
+        fi
+    fi
+    
+    # Memcached
+    echo ""
+    echo -e "${CYAN}Memcached:${NC}"
+    local memcached_bin=$(get_memcached)
+    if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null; then
+        echo -e "  Status: ${GREEN}RUNNING${NC}"
+        if command -v nc &>/dev/null; then
+            echo "  Stats:"
+            echo "stats" | nc -q 1 localhost 11211 2>/dev/null | grep -E "STAT (version|curr_items|bytes|get_hits|get_misses|curr_connections)" | sed 's/^STAT /    /'
+        fi
+    else
+        if [ -n "$memcached_bin" ]; then
+            echo -e "  Status: ${RED}NOT RUNNING${NC}"
+            echo "  Start with: ./webstack memcached start"
+        else
+            echo -e "  Status: ${YELLOW}NOT INSTALLED${NC}"
+            echo "  Install with: ./install_redis_memcached.sh"
+        fi
+    fi
+    echo ""
+}
+
+cache_flush() {
+    echo ""
+    echo "Flushing caches..."
+    
+    local redis_cli=$(get_redis_cli)
+    
+    # Flush Redis
+    if [ -n "$redis_cli" ] && "$redis_cli" ping > /dev/null 2>&1; then
+        "$redis_cli" FLUSHALL > /dev/null 2>&1
+        echo -e "  Redis: ${GREEN}FLUSHED${NC}"
+    else
+        echo -e "  Redis: ${YELLOW}NOT RUNNING${NC}"
+    fi
+    
+    # Flush Memcached
+    if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null; then
+        if command -v nc &>/dev/null; then
+            echo "flush_all" | nc -q 1 localhost 11211 > /dev/null 2>&1
+            echo -e "  Memcached: ${GREEN}FLUSHED${NC}"
+        else
+            echo -e "  Memcached: ${YELLOW}nc not available${NC}"
+        fi
+    else
+        echo -e "  Memcached: ${YELLOW}NOT RUNNING${NC}"
+    fi
+    echo ""
+}
+
+# ============================================
+# MAIN
+# ============================================
 case "$1" in
     start)
         echo ""
+        start_redis
+        start_memcached
         start_php
         start_nginx
         start_node
@@ -194,6 +510,8 @@ case "$1" in
         stop_nginx
         stop_php
         stop_mysql
+        stop_memcached
+        stop_redis
         echo ""
         echo "WebStack stopped!"
         echo ""
@@ -214,7 +532,117 @@ case "$1" in
             echo "Cloudflare tunnel not installed. Run: ./install_cloudflared.sh"
         fi
         ;;
+    cache)
+        shift
+        case "$1" in
+            status)
+                cache_status
+                ;;
+            flush)
+                cache_flush
+                ;;
+            start)
+                echo ""
+                start_redis
+                start_memcached
+                echo ""
+                ;;
+            stop)
+                echo ""
+                stop_memcached
+                stop_redis
+                echo ""
+                ;;
+            restart)
+                echo ""
+                stop_memcached
+                stop_redis
+                sleep 1
+                start_redis
+                start_memcached
+                echo ""
+                ;;
+            *)
+                echo "Cache Commands:"
+                echo ""
+                echo "Usage: $0 cache {status|flush|start|stop|restart}"
+                echo ""
+                echo "  status   Show cache servers status and stats"
+                echo "  flush    Clear all cache data"
+                echo "  start    Start Redis and Memcached"
+                echo "  stop     Stop Redis and Memcached"
+                echo "  restart  Restart cache servers"
+                echo ""
+                ;;
+        esac
+        ;;
+    redis)
+        shift
+        local redis_cli=$(get_redis_cli)
+        case "$1" in
+            start)   start_redis ;;
+            stop)    stop_redis ;;
+            restart) stop_redis; sleep 1; start_redis ;;
+            cli)
+                shift
+                if [ -n "$redis_cli" ]; then
+                    "$redis_cli" "$@"
+                else
+                    echo "Redis CLI not found"
+                fi
+                ;;
+            *)
+                echo "Redis Commands:"
+                echo ""
+                echo "Usage: $0 redis {start|stop|restart|cli}"
+                echo ""
+                echo "  start    Start Redis server"
+                echo "  stop     Stop Redis server"
+                echo "  restart  Restart Redis server"
+                echo "  cli      Open Redis CLI (pass additional args)"
+                echo ""
+                echo "Examples:"
+                echo "  $0 redis cli                  # Open interactive CLI"
+                echo "  $0 redis cli PING             # Send PING command"
+                echo "  $0 redis cli SET key value    # Set a key"
+                echo "  $0 redis cli GET key          # Get a key"
+                echo "  $0 redis cli INFO             # Get server info"
+                echo ""
+                ;;
+        esac
+        ;;
+    memcached)
+        shift
+        case "$1" in
+            start)   start_memcached ;;
+            stop)    stop_memcached ;;
+            restart) stop_memcached; sleep 1; start_memcached ;;
+            stats)
+                if [ -f "$WEBSTACK_ROOT/tmp/memcached.pid" ] && kill -0 $(cat "$WEBSTACK_ROOT/tmp/memcached.pid") 2>/dev/null; then
+                    if command -v nc &>/dev/null; then
+                        echo "stats" | nc -q 1 localhost 11211 2>/dev/null
+                    else
+                        echo "nc (netcat) not installed. Install with: sudo apt install netcat"
+                    fi
+                else
+                    echo "Memcached is not running"
+                fi
+                ;;
+            *)
+                echo "Memcached Commands:"
+                echo ""
+                echo "Usage: $0 memcached {start|stop|restart|stats}"
+                echo ""
+                echo "  start    Start Memcached server"
+                echo "  stop     Stop Memcached server"
+                echo "  restart  Restart Memcached server"
+                echo "  stats    Show Memcached statistics"
+                echo ""
+                ;;
+        esac
+        ;;
     logs)
+        echo ""
         echo "=== Nginx Error Log ==="
         tail -20 "$WEBSTACK_ROOT/nginx/logs/error.log" 2>/dev/null
         echo ""
@@ -223,27 +651,58 @@ case "$1" in
         echo ""
         echo "=== Node.js Log ==="
         tail -20 "$WEBSTACK_ROOT/logs/node.log" 2>/dev/null
+        echo ""
+        echo "=== Redis Log ==="
+        tail -10 "$WEBSTACK_ROOT/logs/redis.log" 2>/dev/null
+        echo ""
+        echo "=== Memcached Log ==="
+        tail -10 "$WEBSTACK_ROOT/logs/memcached.log" 2>/dev/null
+        echo ""
+        echo "=== MySQL Error Log ==="
+        tail -10 "$WEBSTACK_ROOT/logs/mysql-error.log" 2>/dev/null
         ;;
     *)
+        echo ""
         echo "WebStack Control"
+        echo "================"
         echo ""
-        echo "Usage: $0 {start|stop|restart|status|tunnel|logs}"
+        echo "Usage: $0 <command> [options]"
         echo ""
-        echo "Commands:"
+        echo "Main Commands:"
         echo "  start         Start all services"
         echo "  stop          Stop all services"
         echo "  restart       Restart all services"
         echo "  status        Show status of all services"
-        echo "  tunnel <cmd>  Manage Cloudflare tunnel"
         echo "  logs          Show recent logs"
         echo ""
-        echo "Tunnel commands:"
+        echo "Cloudflare Tunnel:"
         echo "  tunnel start       Start tunnel"
         echo "  tunnel stop        Stop tunnel"
         echo "  tunnel daemon      Start with auto-reconnect"
         echo "  tunnel status      Show tunnel status"
         echo "  tunnel url         Show current URL"
         echo "  tunnel logs        Show URL history"
+        echo ""
+        echo "Cache Commands:"
+        echo "  cache status       Show cache status and stats"
+        echo "  cache flush        Clear all cache data"
+        echo "  cache start        Start Redis and Memcached"
+        echo "  cache stop         Stop Redis and Memcached"
+        echo "  cache restart      Restart cache servers"
+        echo ""
+        echo "Redis Commands:"
+        echo "  redis start        Start Redis"
+        echo "  redis stop         Stop Redis"
+        echo "  redis restart      Restart Redis"
+        echo "  redis cli [cmd]    Open Redis CLI or run command"
+        echo ""
+        echo "Memcached Commands:"
+        echo "  memcached start    Start Memcached"
+        echo "  memcached stop     Stop Memcached"
+        echo "  memcached restart  Restart Memcached"
+        echo "  memcached stats    Show Memcached stats"
+        echo ""
+        echo "Services: Nginx, PHP-FPM, Node.js, WebSocket, MySQL, Redis, Memcached"
         echo ""
         exit 1
         ;;

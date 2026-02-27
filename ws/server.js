@@ -1,29 +1,103 @@
 const WebSocket = require('ws');
-const wss = new WebSocket.Server({ port: 8081 });
+const PORT = 8081;
+
+const wss = new WebSocket.Server({ port: PORT });
 let clientId = 0;
+const clients = new Map();
 
 wss.on('connection', (ws, req) => {
     const id = ++clientId;
-    console.log(`Client ${id} connected`);
+    const clientIp = req.socket.remoteAddress;
     
-    ws.send(JSON.stringify({ type: 'welcome', id: id, time: new Date().toISOString() }));
+    clients.set(id, { ws, ip: clientIp, joinedAt: new Date() });
     
-    ws.on('message', data => {
+    console.log(`[${new Date().toISOString()}] Client ${id} connected from ${clientIp}`);
+    
+    // Send welcome message
+    ws.send(JSON.stringify({
+        type: 'welcome',
+        id: id,
+        message: 'Connected to WebStack WebSocket server',
+        clients: clients.size,
+        time: new Date().toISOString()
+    }));
+    
+    // Broadcast new client to others
+    broadcast({
+        type: 'client_joined',
+        id: id,
+        clients: clients.size
+    }, ws);
+    
+    // Handle messages
+    ws.on('message', (data) => {
         const message = data.toString();
-        console.log(`Client ${id}: ${message}`);
+        console.log(`[${new Date().toISOString()}] Client ${id}: ${message}`);
         
-        // Echo back
-        ws.send(JSON.stringify({ type: 'echo', data: message, time: new Date().toISOString() }));
-        
-        // Broadcast to all clients
-        wss.clients.forEach(client => {
-            if (client !== ws && client.readyState === WebSocket.OPEN) {
-                client.send(JSON.stringify({ type: 'broadcast', from: id, data: message }));
+        try {
+            const parsed = JSON.parse(message);
+            
+            // Handle different message types
+            if (parsed.type === 'ping') {
+                ws.send(JSON.stringify({ type: 'pong', time: new Date().toISOString() }));
+            } else if (parsed.type === 'broadcast') {
+                broadcast({
+                    type: 'broadcast',
+                    from: id,
+                    data: parsed.data,
+                    time: new Date().toISOString()
+                });
+            } else {
+                // Echo back
+                ws.send(JSON.stringify({
+                    type: 'echo',
+                    data: parsed,
+                    time: new Date().toISOString()
+                }));
             }
+        } catch (e) {
+            // Plain text message - echo back
+            ws.send(JSON.stringify({
+                type: 'echo',
+                data: message,
+                time: new Date().toISOString()
+            }));
+            
+            // Broadcast to others
+            broadcast({
+                type: 'message',
+                from: id,
+                data: message,
+                time: new Date().toISOString()
+            }, ws);
+        }
+    });
+    
+    // Handle disconnect
+    ws.on('close', () => {
+        clients.delete(id);
+        console.log(`[${new Date().toISOString()}] Client ${id} disconnected`);
+        
+        broadcast({
+            type: 'client_left',
+            id: id,
+            clients: clients.size
         });
     });
     
-    ws.on('close', () => console.log(`Client ${id} disconnected`));
+    // Handle errors
+    ws.on('error', (error) => {
+        console.error(`[${new Date().toISOString()}] Client ${id} error:`, error.message);
+    });
 });
 
-console.log('WebSocket server running on port 8081');
+function broadcast(message, exclude = null) {
+    const data = JSON.stringify(message);
+    clients.forEach((client) => {
+        if (client.ws !== exclude && client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(data);
+        }
+    });
+}
+
+console.log(`[${new Date().toISOString()}] WebSocket server running on port ${PORT}`);

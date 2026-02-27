@@ -1,32 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebStack</title>
     <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        h1 { color: #333; }
-        .status { padding: 10px; border-radius: 5px; margin: 10px 0; }
-        .ok { background: #d4edda; color: #155724; }
-        .links a { display: inline-block; margin: 5px 10px 5px 0; padding: 8px 16px; background: #007bff; color: white; text-decoration: none; border-radius: 4px; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+            max-width: 900px; 
+            margin: 0 auto; 
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .header { text-align: center; padding: 30px 0; }
+        .header h1 { color: #333; font-size: 2.5em; }
+        .status { padding: 15px; border-radius: 8px; margin: 20px 0; text-align: center; }
+        .ok { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .card { background: white; border-radius: 8px; padding: 20px; margin: 15px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .card h3 { margin-bottom: 15px; color: #333; }
+        .links { display: flex; flex-wrap: wrap; gap: 10px; }
+        .links a { 
+            display: inline-block; 
+            padding: 10px 20px; 
+            background: #007bff; 
+            color: white; 
+            text-decoration: none; 
+            border-radius: 5px;
+            transition: background 0.2s;
+        }
         .links a:hover { background: #0056b3; }
+        .links a.green { background: #28a745; }
+        .links a.green:hover { background: #1e7e34; }
+        .links a.orange { background: #fd7e14; }
+        .links a.orange:hover { background: #e56b00; }
+        ul { list-style: none; }
+        ul li { padding: 8px 0; border-bottom: 1px solid #eee; }
+        ul li:last-child { border-bottom: none; }
+        code { background: #e9ecef; padding: 2px 6px; border-radius: 3px; font-size: 0.9em; }
     </style>
 </head>
 <body>
-    <h1>🚀 WebStack Working!</h1>
-    <div class="status ok">Server is running successfully</div>
-    <div class="links">
-        <a href="index.php">PHP Test</a>
-        <a href="phpinfo.php">PHP Info</a>
-        <a href="phpmyadmin/">phpMyAdmin</a>
-        <a href="/api/status">API Status</a>
+    <div class="header">
+        <h1>? WebStack</h1>
+        <p>Portable Web Development Environment</p>
     </div>
-    <h3>Features</h3>
-    <ul>
-        <li>HTTP/2 & HTTP/3 (QUIC)</li>
-        <li>PHP 8.3 with Redis & Memcached</li>
-        <li>Node.js with WebSocket</li>
-        <li>RTMP/RTMPS Streaming</li>
-        <li>Cloudflare Tunnel Support</li>
-    </ul>
+    
+    <div class="status ok">? Server is running successfully</div>
+    
+    <div class="card">
+        <h3>Quick Links</h3>
+        <div class="links">
+            <a href="index.php">PHP Test</a>
+            <a href="phpinfo.php">PHP Info</a>
+            <a href="test_cache.php" class="green">Cache Test</a>
+            <a href="phpmyadmin/">phpMyAdmin</a>
+            <a href="/api/status" class="orange">API Status</a>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h3>Features</h3>
+        <ul>
+            <li>? <strong>Nginx</strong> - HTTP/2, HTTP/3 (QUIC), RTMP/RTMPS Streaming</li>
+            <li>? <strong>PHP 8.3</strong> - FPM with OPcache, JIT, 50+ extensions</li>
+            <li>? <strong>Node.js</strong> - API server with WebSocket support</li>
+            <li>? <strong>MySQL/MariaDB</strong> - Database server with phpMyAdmin</li>
+            <li>? <strong>Redis</strong> - In-memory cache and data store</li>
+            <li>? <strong>Memcached</strong> - High-performance caching</li>
+            <li>? <strong>Cloudflare Tunnel</strong> - Instant public HTTPS access</li>
+        </ul>
+    </div>
+    
+    <div class="card">
+        <h3>URLs</h3>
+        <ul>
+            <li><strong>HTTP:</strong> <code>http://localhost</code></li>
+            <li><strong>HTTPS:</strong> <code>https://localhost</code></li>
+            <li><strong>RTMP:</strong> <code>rtmp://localhost:1935/live/streamkey</code></li>
+            <li><strong>RTMPS:</strong> <code>rtmps://localhost:1936/live/streamkey</code></li>
+            <li><strong>WebSocket:</strong> <code>ws://localhost/ws</code></li>
+        </ul>
+    </div>
+    
+    <div class="card">
+        <h3>Cache Connections</h3>
+        <ul>
+            <li><strong>Redis:</strong> <code>127.0.0.1:6379</code></li>
+            <li><strong>Memcached:</strong> <code>127.0.0.1:11211</code></li>
+        </ul>
+    </div>
 </body>
 </html>
